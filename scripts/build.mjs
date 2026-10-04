@@ -1,0 +1,15 @@
+import {build} from 'esbuild';
+import {mkdir,copyFile,chmod,readFile,writeFile} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+await mkdir('payload',{recursive:true});await mkdir('dist',{recursive:true});
+await build({entryPoints:['src/page.tsx'],bundle:true,minify:true,outfile:'payload/page.js',loader:{'.png':'dataurl'},define:{'process.env.NODE_ENV':'"production"'}});
+await build({entryPoints:['vendor/framely-sdk/src/bootstrap.ts'],bundle:true,minify:true,outfile:'payload/bridge.js'});
+await build({entryPoints:['backend/controller.mjs'],bundle:true,platform:'node',target:'node26',format:'esm',outfile:'payload/controller.js'});
+await copyFile('backend/launch.py','payload/launch.py');await chmod('payload/launch.py',0o755);
+await copyFile('LICENSE','payload/LICENSE');
+await copyFile('icon.png','payload/icon.png');
+await copyFile('assets/icon.svg','payload/icon.svg');
+execFileSync('python3',['scripts/runtime.py'],{stdio:'inherit'});
+const manifest=JSON.parse(await readFile('manifest.json','utf8'));
+await writeFile('dist/build-info.json',JSON.stringify({plugin:manifest.version,termix:'2.9.0',commit:'3643e7af97c6a597ad09db51d12676faa1dfc87c',architecture:'linux-arm64'},null,2)+'\n');
+console.log('Built complete offline plugin payload.');

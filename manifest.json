@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "id": "tooru.termix",
+  "name": "Termix",
+  "author": "tooru",
+  "version": "0.1.8",
+  "description": "在 Frame 上使用 Termix 终端、文件管理与远程桌面，也可通过内网浏览器访问。",
+  "details": "将 Frame 变成可通过内网访问的远程管理工作台。使用 Termix 管理 SSH 连接、操作终端、传输文件，并连接远程桌面。在快捷面板设置登录账号、访问方式和网卡，点击打开即可在 Framely 大窗口直接使用；界面语言默认跟随 Framely，也可自行选择。",
+  "tags": [
+    "Tools",
+    "Terminal",
+    "Remote Access"
+  ],
+  "homepage": "https://github.com/Termix-SSH/Termix",
+  "backend": {
+    "entry": "launch.py",
+    "runAs": "steamos",
+    "autostart": true,
+    "restart": "on-failure",
+    "restartLimit": 3
+  },
+  "ui": {
+    "quickPage": "page.js",
+    "windows": {
+      "main": {
+        "entry": "page.js",
+        "title": "Termix",
+        "dockIcon": true,
+        "localWeb": true
+      }
+    }
+  },
+  "lifecycle": {
+    "onStart": true,
+    "onStop": true,
+    "onUninstall": {
+      "entry": "launch.py",
+      "args": [
+        "--cleanup"
+      ]
+    },
+    "onCrashCleanup": {
+      "entry": "launch.py",
+      "args": [
+        "--crash-cleanup"
+      ]
+    },
+    "timeoutSeconds": 15
+  },
+  "files": {},
+  "icon": "icon.png",
+  "changelog": "修复快捷面板证书下载无反馈：改为后台导出至 Frame 用户 Downloads，显示处理中状态和保存路径，避免浏览器沙箱下载限制。"
+}
