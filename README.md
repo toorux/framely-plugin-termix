@@ -18,7 +18,7 @@ python3 scripts/pack.py
 安装包生成在 `dist/`，包含完整离线运行环境。可用新版 Framely 校验：
 
 ```sh
-framely verify dist/tooru.termix-0.1.8.framely
+framely verify dist/tooru.termix-0.1.9-preview.1.framely
 ```
 
 ## 上游与许可证
@@ -32,8 +32,8 @@ framely verify dist/tooru.termix-0.1.8.framely
 推送与 `manifest.json` 版本一致的标签，自动构建并发布 GitHub Release：
 
 ```sh
-git tag v0.1.8
-git push origin v0.1.8
+git tag v0.1.9-preview.1
+git push origin v0.1.9-preview.1
 ```
 
 也可在对应标签上手动运行 **Release plugin**。
