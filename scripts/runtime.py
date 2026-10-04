@@ -17,6 +17,8 @@ source = Path(os.environ.get('TERMIX_RUNTIME_SOURCE', str(default_source)))
 if not source.exists():
     raise SystemExit('Missing ARM64 runtime. Run python3 scripts/upstream.py first, or set TERMIX_RUNTIME_SOURCE.')
 target = ROOT / 'payload/runtime.zip'
+target.parent.mkdir(parents=True, exist_ok=True)
+(ROOT / 'dist').mkdir(parents=True, exist_ok=True)
 stamp_path = ROOT / '.cache/runtime-input.json'
 stamp_path.parent.mkdir(parents=True, exist_ok=True)
 stamp = {'source': str(source.resolve()), 'mtime': source.stat().st_mtime_ns, 'size': source.stat().st_size,
