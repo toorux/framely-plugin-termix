@@ -76,6 +76,27 @@ try:
     code,reply=request(f'http://127.0.0.1:{http_port}/users/login',{'username':'integration','password':'abc123'})
     assert code==200,(code,reply.decode()[:120])
     token=json.loads(reply)['token']
+    # Runtime lives below .cache here and below .local on Frame. Exercise the
+    # real asset route: sendFile must not reject hidden install ancestors.
+    code,reply=request(f'http://127.0.0.1:{http_port}/plugins',token=token)
+    assert code==200,(code,reply)
+    plugins=json.loads(reply)
+    frontends=[p for p in plugins if p.get('enabled') and p.get('frontend')]
+    assert any(p['id']=='ssh-terminal' for p in frontends),plugins
+    for base in [f'http://127.0.0.1:{http_port}',f'https://127.0.0.1:{https_port}']:
+        for plugin in frontends:
+            prefix=base+'/plugin-assets/'+plugin['id']+'/'
+            files=['frontend.js']
+            if plugin.get('css'):files.append('frontend.css')
+            for locale in ['en','zh_CN']:
+                if locale in plugin.get('locales',[]):
+                    files.append('locales/'+('en.json' if locale=='en' else 'translated/'+locale+'.json'))
+            for asset in files:
+                code,body=request(prefix+asset+'?v='+plugin['assetVersion'])
+                assert code==200 and body,(plugin['id'],asset,code,body[:120])
+        for forbidden in ['backend.js','migrations/test.js','.env','%2e%2e/%2e%2e/backend/backend/starter.js']:
+            assert request(base+'/plugin-assets/ssh-terminal/'+forbidden)[0]==404,forbidden
+    print(f'PASS: {len(frontends)} plugin frontends, styles and locales over HTTP/HTTPS from hidden runtime directory; server files remain inaccessible',flush=True)
     # Only the authenticated plugin RPC issues tickets. Public listeners cannot redeem them.
     login=rpc('window.login')['url'];parsed=urlparse(login)
     assert request(f'http://127.0.0.1:{http_port}'+parsed.path+'?'+parsed.query)[0]==403

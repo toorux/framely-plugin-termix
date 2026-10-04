@@ -4,7 +4,7 @@
   "id": "tooru.termix",
   "name": "Termix",
   "author": "tooru",
-  "version": "0.1.9-preview.3",
+  "version": "0.1.9-preview.4",
   "description": "在 Frame 上使用 Termix 终端、文件管理与远程桌面，也可通过内网浏览器访问。",
   "details": "将 Frame 变成可通过内网访问的远程管理工作台。使用 Termix 管理 SSH 连接、操作终端、传输文件，并连接远程桌面。在快捷面板设置登录账号、访问方式和网卡，点击打开即可在 Framely 大窗口直接使用；界面语言默认跟随 Framely，也可自行选择。",
   "tags": [
@@ -50,5 +50,5 @@
   },
   "files": {},
   "icon": "icon.png",
-  "changelog": "重新发布测试版，使用已修复大包校验的上游数据库进行注册；保留首次构建目录修复及完整 Termix 功能。"
+  "changelog": "修复安装路径包含隐藏目录时内置功能资源返回 500、连接菜单为空的问题。"
 }

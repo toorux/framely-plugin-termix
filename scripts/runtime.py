@@ -28,7 +28,7 @@ if target.exists() and stamp_path.exists() and json.loads(stamp_path.read_text()
     raise SystemExit(0)
 with zipfile.ZipFile(source) as src, zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as dst:
     names = set(src.namelist())
-    required = {'runtime/node','termix/dist/backend/backend/starter.js','termix/dist/backend/backend/database/database.js','guacd/opt/guacamole/sbin/guacd'}
+    required = {'runtime/node','termix/dist/backend/backend/starter.js','termix/dist/backend/backend/database/database.js','termix/dist/backend/backend/plugins/assets.js','guacd/opt/guacamole/sbin/guacd'}
     if not required <= names:
         raise SystemExit('Runtime is incomplete')
     for member in src.infolist():
@@ -50,6 +50,15 @@ with zipfile.ZipFile(source) as src, zipfile.ZipFile(target, 'w', compression=zi
             if text.count('const HTTP_PORT = 30001;') != 1:
                 raise SystemExit('Pinned Termix HTTP listener changed')
             data = text.replace('const HTTP_PORT = 30001;', 'const HTTP_PORT = Number(process.env.TERMIX_HTTP_PORT || 30001);').encode()
+        if member.filename == 'termix/dist/backend/backend/plugins/assets.js':
+            text = data.decode()
+            marker = 'res.sendFile(file);'
+            if text.count(marker) != 1:
+                raise SystemExit('Pinned Termix plugin asset handler changed')
+            # Express otherwise treats hidden ancestors of the install path
+            # (such as ~/.local) as dotfiles. Keep the checked plugin directory
+            # as the root so dotfile checks apply only to the requested asset.
+            data = text.replace(marker, 'res.sendFile(path.relative(plugin.dir, file), { root: plugin.dir });').encode()
         # Compiled guacd plugins load shared libraries by name. Put all runtime
         # library paths on its musl loader search path in the controller.
         dst.writestr(member, data)

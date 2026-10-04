@@ -24,6 +24,7 @@ class RuntimeAssembly(unittest.TestCase):
                 z.writestr('termix/dist/backend/backend/starter.js',
                     'Object.assign(process.env, persistentConfig.parsed);\nconst gracefulShutdown = async (signal) => {')
                 z.writestr('termix/dist/backend/backend/database/database.js','const HTTP_PORT = 30001;')
+                z.writestr('termix/dist/backend/backend/plugins/assets.js','res.sendFile(file);')
             env={**os.environ,'TERMIX_RUNTIME_SOURCE':str(source)}
             self.assertFalse((root/'payload').exists());self.assertFalse((root/'dist').exists())
             subprocess.run(['python3','scripts/runtime.py'],cwd=root,env=env,check=True,capture_output=True)
@@ -34,5 +35,6 @@ class RuntimeAssembly(unittest.TestCase):
             with zipfile.ZipFile(output) as z:
                 self.assertIn('termix/dist/backend/backend/framely-adapter.mjs',z.namelist())
                 self.assertIn(b'TERMIX_HTTP_PORT',z.read('termix/dist/backend/backend/database/database.js'))
+                self.assertIn(b'root: plugin.dir',z.read('termix/dist/backend/backend/plugins/assets.js'))
             second=subprocess.run(['python3','scripts/runtime.py'],cwd=root,env=env,check=True,capture_output=True,text=True)
             self.assertIn('Reusing unchanged offline runtime',second.stdout)
