@@ -16,9 +16,9 @@ test('access policy covers ordinary HTTP and WebSocket upgrades',async()=>{
  assert.match(answer,/403 Forbidden/);
  }finally{p.disconnect();await new Promise(r=>s.close(r));}
 });
-test('only local proxy can redeem window login, using HttpOnly cookie and clean redirect',async()=>{
+test('only local proxy can redeem window login, initializing frontend session with HttpOnly cookie',async()=>{
  let calls=0;
- const options={port:1,allowed:()=>true,languageScript:()=>'',assets:{},windowLogin:async ticket=>{calls++;return ticket==='ticket'?{token:'session-token',maxAge:60000}:null;}};
+ const options={port:1,allowed:()=>true,languageScript:()=>'',assets:{},windowLogin:async ticket=>{calls++;return ticket==='ticket'?{token:'session-token',maxAge:60000,username:'test'}:null;}};
  const local=createProxy({...options,local:true}),lan=createProxy(options);
  const servers=[http.createServer(local.handle),http.createServer(lan.handle)];
  for(const s of servers)await new Promise(r=>s.listen(0,'127.0.0.1',r));
@@ -27,7 +27,8 @@ test('only local proxy can redeem window login, using HttpOnly cookie and clean 
   assert.equal((await fetch(url(servers[1]),{redirect:'manual'})).status,403);assert.equal(calls,0);
   assert.equal((await fetch(url(servers[0]),{redirect:'manual',headers:{Origin:'https://untrusted.example'}})).status,403);assert.equal(calls,0);
   assert.equal((await fetch(url(servers[0]),{method:'POST',redirect:'manual'})).status,403);assert.equal(calls,0);
-  const r=await fetch(url(servers[0]),{redirect:'manual'});assert.equal(r.status,303);assert.equal(r.headers.get('location'),'/');
+  const r=await fetch(url(servers[0]),{redirect:'manual'});assert.equal(r.status,200);assert.match(await r.text(),/framely-window-session/);
+  assert.equal((await fetch(url(servers[1]).split('/framely-window')[0]+'/framely-window/session.js')).status,403);
   assert.match(r.headers.get('set-cookie'),/HttpOnly; SameSite=Strict/);assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(r.headers.get('referrer-policy'),'no-referrer');
  }finally{await Promise.all(servers.map(s=>new Promise(r=>s.close(r))));}
 });

@@ -24,12 +24,29 @@ function useStatus(){
 }
 function QuickPage(){
   const {status,error:pollError,setStatus}=useStatus();
-  const [draft,setDraft]=useState<Config|null>(null),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState(''),[waiting,setWaiting]=useState(false),[languageError,setLanguageError]=useState(false);
+  const [draft,setDraft]=useState<Config|null>(null),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState(''),[waiting,setWaiting]=useState(false),[languageError,setLanguageError]=useState(false),[languageSyncError,setLanguageSyncError]=useState('');
   const [certificatePath,setCertificatePath]=useState(''),[exportingCertificate,setExportingCertificate]=useState(false);
   const [systemLanguage,setSystemLanguage]=useState<string|null>(null);
-  const dirty=useRef(false),accountDirty=useRef(false);
+  const dirty=useRef(false),accountDirty=useRef(false),serviceBusy=useRef(false);
+  serviceBusy.current=status?.busy===true;
   useEffect(()=>{if(status&&!status.busy&&!dirty.current)setDraft(status.config);if(status&&!status.busy&&!accountDirty.current)setUsername(status.config.username);},[status]);
-  useEffect(()=>{let live=true,last='';const sync=async()=>{try{const value=await framely.language.get();if(live){setSystemLanguage(value.language);setLanguageError(false);}if(live&&value.language!==last){const s=await framely.call<Status>('language.sync',{language:value.language});last=value.language;if(live){setStatus(s);setLanguageError(false);}}}catch{if(live)setLanguageError(true);}};void sync();const id=setInterval(()=>void sync(),2000);const off=framely.onEvent(e=>{if((e as {type?:string}).type==='language.changed')void sync();});return()=>{live=false;clearInterval(id);off();};},[]);
+  useEffect(()=>{
+    let live=true,last='',syncing=false;
+    const sync=async()=>{
+      if(syncing)return;syncing=true;
+      try{
+        let value;
+        try{value=await framely.language.get();}catch{if(live)setLanguageError(true);return;}
+        if(!live)return;
+        setSystemLanguage(value.language);setLanguageError(false);
+        if(serviceBusy.current||value.language===last)return;
+        try{const s=await framely.call<Status>('language.sync',{language:value.language});if(!s.busy&&!s.error&&s.config.systemLanguage===value.language)last=value.language;if(live){setStatus(s);setLanguageSyncError('');}}catch(e){if(live)setLanguageSyncError(String(e));}
+      }finally{syncing=false;}
+    };
+    void sync();const id=setInterval(()=>void sync(),2000);
+    const off=framely.onEvent(e=>{if((e as {type?:string}).type==='language.changed')void sync();});
+    return()=>{live=false;clearInterval(id);off();};
+  },[]);
   const language=!draft||draft.language==='auto'?systemLanguage??status?.config.systemLanguage??'en-US':draft.language;const t=(key:string)=>translate(language,key);
   const blocked=waiting||status?.busy===true;
   async function call(method:string,params:unknown={}){setWaiting(true);setError('');try{setStatus(await framely.call<Status>(method,params));}catch(e){setError(String(e));}finally{setWaiting(false);}}
@@ -41,7 +58,7 @@ function QuickPage(){
   const phases:Record<string,string>={stopped:'已停止',starting:'启动中',running:'运行中',stopping:'停止中',failed:'失败'};
   return <main className="termix-panel">
     <header><div className="termix-brand"><img src={termixIcon} alt="" width="52" height="52"/><div className="brand-copy"><h1>Termix</h1><p className={'service-status '+status.phase}><i/>{t(phases[status.phase]??status.phase)} · {status.upstream}</p></div></div><Button className="primary open-button" disabled={blocked||status.phase!=='running'} onClick={()=>void framely.windows.open('main').catch(e=>setError(String(e)))}>{t('打开')}</Button></header>
-    {(error||pollError||status.error)&&<div className="notice error" role="alert">{error||pollError||status.error}</div>}
+    {(error||pollError||status.error||languageSyncError)&&<div className="notice error" role="alert">{error||pollError||status.error||languageSyncError}</div>}
     {languageError&&<div className="notice" role="status">{t('Framely 语言接口不可用，请更新宿主。')}</div>}
     <section className="service-controls"><Toggle label={t('启用 Termix')} description={t('仅通过已选择的内网接口访问。')} checked={status.config.enabled} disabled={blocked||dirty.current||!status.config.configured} onChange={enabled=>void call('service.set',{enabled})}/>{!status.config.configured&&<p className="muted">{t('先设置账号密码，再启用服务。')}</p>}</section>
     <section className="account-settings"><h2>{t('登录账号')}</h2><p className="section-description">{t('Web 账号与 Frame 系统密码分开。')}</p>

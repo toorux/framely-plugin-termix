@@ -1,5 +1,6 @@
 import http from 'node:http';
 import net from 'node:net';
+import {windowSessionPage,windowSessionScript,windowSessionAuthScript} from './window-session.mjs';
 
 export function forwardHeaders(req) {
   const h={...req.headers};
@@ -24,9 +25,17 @@ export function createProxy({port,allowed,languageScript,local=false,bootstrap,w
         const ticket=new URL(req.url,'http://localhost').searchParams.get('ticket');
         const session=await windowLogin?.(ticket);
         if(!session){res.writeHead(403,headers);res.end('Window login expired; reopen the window');return;}
-        res.writeHead(303,{...headers,location:'/', 'set-cookie':`jwt=${session.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(session.maxAge/1000)}`});res.end();
+        res.writeHead(200,{...headers,'content-type':'text/html; charset=utf-8','content-security-policy':"default-src 'none'; script-src 'self'; base-uri 'none'; form-action 'none'",'x-content-type-options':'nosniff','set-cookie':`jwt=${session.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(session.maxAge/1000)}`});res.end(windowSessionPage(session));
       }catch{res.writeHead(503,headers);res.end('Window login unavailable; reopen the window');}
       return;
+    }
+    if(pathname==='/framely-window/session.js'){
+      if(!local||req.method!=='GET'||!validOrigin(req)){res.writeHead(403);res.end('Window login denied');return;}
+      res.writeHead(200,{'content-type':'text/javascript','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(windowSessionScript);return;
+    }
+    if(pathname==='/framely-auth.js'){
+      if(!local){res.writeHead(403);res.end('Window login denied');return;}
+      res.writeHead(200,{'content-type':'text/javascript','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(windowSessionAuthScript);return;
     }
     if(pathname==='/framely-window/main'&&local){res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self' http://localhost:*; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'",'cache-control':'no-store'});res.end(wrapper);return;}
     if(pathname==='/framely-language.js'){res.writeHead(200,{'content-type':'text/javascript','cache-control':'no-store'});res.end(languageScript());return;}
@@ -38,7 +47,7 @@ export function createProxy({port,allowed,languageScript,local=false,bootstrap,w
         const chunks=[];let size=0;
         response.on('data',b=>{size+=b.length;if(size>4*1024*1024){upstream.destroy();res.destroy();}else chunks.push(b);});
         response.on('end',()=>{
-          const extra='<script src="/framely-language.js"></script>'+(local?'<script src="/framely-bootstrap.js"></script>':'');
+          const extra='<script src="/framely-language.js"></script>'+(local?'<script src="/framely-auth.js"></script><script src="/framely-bootstrap.js"></script>':'');
           const body=Buffer.from(Buffer.concat(chunks).toString().replace(/<head[^>]*>/i,x=>x+extra));
           delete headers['content-length'];delete headers['etag'];delete headers['content-encoding'];headers['cache-control']='no-store';
           // A nested Framely window has a distinct loopback origin. Its parent

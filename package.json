@@ -1,6 +1,6 @@
 {
   "name": "framely-plugin-termix",
-  "version": "0.1.9-preview.4",
+  "version": "0.1.9-preview.5",
   "private": true,
   "type": "module",
   "scripts": {

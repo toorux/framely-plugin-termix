@@ -54,7 +54,7 @@ async function windowLogin({userId}) {
   const req={headers,ip:'127.0.0.1',socket:{remoteAddress:'127.0.0.1'},get:name=>headers[name.toLowerCase()]};
   const session=await issueSession(req,user,{rememberMe:false,methodId:'framely-window'});
   await DatabaseSaveTrigger.forceSave('framely_window_login');
-  return {token:session.token,maxAge:session.maxAge};
+  return {token:session.token,maxAge:session.maxAge,username:user.username};
 }
 export function install() {
   let queue=Promise.resolve();

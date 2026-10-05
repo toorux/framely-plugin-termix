@@ -16,6 +16,7 @@ import {certificate} from './tls.mjs';
 import {normalizeLanguage} from './language.mjs';
 import {windowTickets} from './window-login.mjs';
 import {exportCertificate} from './certificate-export.mjs';
+import {deferredLanguageSync} from './language-sync.mjs';
 
 const exec=promisify(execFile),root=path.dirname(fileURLToPath(import.meta.url));
 const data=process.env.FRAMELY_DATA_DIR;if(!data)throw Error('FRAMELY_DATA_DIR is required');
@@ -23,6 +24,7 @@ const runtime=process.env.TERMIX_RUNTIME;if(!runtime)throw Error('TERMIX_RUNTIME
 const app=path.join(runtime,'termix'),node=path.join(runtime,'runtime/node');
 let config=await loadConfig(data),interfaces=[],children=[],servers=[],proxies=[],internalPort=0,localPort=0,phase='stopped',error='',busy=false,child=null,certInfo=null;
 let sequence=0,pidWrites=Promise.resolve();const pending=new Map();
+let languageSyncError='';
 const tickets=windowTickets();
 const settingsFields=['httpEnabled','httpsEnabled','httpPort','httpsPort','interfaces','language'];
 const assets={ '/framely-page.js':await readFile(path.join(root,'page.js')), '/framely-bridge.js':await readFile(path.join(root,'bridge.js')) };
@@ -31,7 +33,7 @@ function effectiveLanguage(){return config.language==='auto'?config.systemLangua
 function termixLanguage(){return normalizeLanguage(effectiveLanguage());}
 function languageScript(){return `(()=>{const d=${JSON.stringify(termixLanguage())};try{const old=localStorage.getItem('framely-default-language'),current=localStorage.getItem('i18nextLng');if(!current||current===old)localStorage.setItem('i18nextLng',d);localStorage.setItem('framely-default-language',d);}catch{}})();`;}
 function selected(){return config.interfaces??defaultInterfaces(interfaces);}
-function status(){return {phase,error,busy,config,interfaces:selectedInterfaces(),language:effectiveLanguage(),localUrl:localPort?`http://localhost:${localPort}/framely-window/main`:null,addresses:interfaces.filter(i=>selected().includes(i.key)&&i.up).flatMap(i=>i.addresses.filter(a=>privateIP(a.address)).flatMap(a=>{const h=a.address.includes(':')?'['+a.address+']':a.address;return [...(config.httpEnabled?[`http://${h}:${config.httpPort}`]:[]),...(config.httpsEnabled?[`https://${h}:${config.httpsPort}`]:[])];})),certificate:certInfo?{fingerprint:certInfo.fingerprint}:null,upstream:'2.9.0'};}
+function status(){return {phase,error:error||languageSyncError,busy,config,interfaces:selectedInterfaces(),language:effectiveLanguage(),localUrl:localPort?`http://localhost:${localPort}/framely-window/main`:null,addresses:interfaces.filter(i=>selected().includes(i.key)&&i.up).flatMap(i=>i.addresses.filter(a=>privateIP(a.address)).flatMap(a=>{const h=a.address.includes(':')?'['+a.address+']':a.address;return [...(config.httpEnabled?[`http://${h}:${config.httpPort}`]:[]),...(config.httpsEnabled?[`https://${h}:${config.httpsPort}`]:[])];})),certificate:certInfo?{fingerprint:certInfo.fingerprint}:null,upstream:'2.9.0'};}
 function selectedInterfaces(){return interfaces.map(i=>({...i,enabled:selected().includes(i.key)}));}
 async function refreshNetwork(){interfaces=await discoverInterfaces();}
 function allowed(s){return phase==='running'&&permitted(s.remoteAddress,s.localAddress,interfaces,selected());}
@@ -83,7 +85,13 @@ async function start(){
   }
   phase='running';
 }
-function operation(fn){if(busy)throw Error('An operation is already running');busy=true;error='';void Promise.resolve().then(fn).catch(async e=>{error=e.message;await stop();phase='failed';}).finally(()=>{busy=false;});return status();}
+const languageSync=deferredLanguageSync(async language=>{
+  config=validateConfig({...config,systemLanguage:language});
+  await saveConfig(data,config);
+  if(child)await control('language.set',{userId:config.userId,language:termixLanguage()});
+  languageSyncError='';
+});
+function operation(fn,resetError=true){if(busy)throw Error('An operation is already running');busy=true;if(resetError)error='';void Promise.resolve().then(fn).catch(async e=>{error=e.message;await stop();phase='failed';}).then(()=>languageSync.drain()).catch(e=>{languageSyncError=e.message;}).finally(()=>{busy=false;});return status();}
 async function dispatch(method,params={}) {
   if(method==='status.get')return status();
   if(method==='window.get'){if(phase!=='running'||!localPort)throw Error('Enable Termix first');return {url:`http://localhost:${localPort}/framely-window/main`};}
@@ -106,9 +114,10 @@ async function dispatch(method,params={}) {
     return operation(async()=>{await stop();config={...config,enabled:params.enabled};await saveConfig(data,config);if(config.enabled)await start();});
   }
   if(method==='language.sync') {
-    if(busy)throw Error('An operation is already running');
-    const next=validateConfig({...config,systemLanguage:params.language});config=next;await saveConfig(data,config);
-    if(child&&!busy)await control('language.set',{userId:config.userId,language:termixLanguage()});return status();
+    validateConfig({...config,systemLanguage:params.language});
+    if(!busy&&!languageSync.hasPending()&&!languageSyncError&&config.systemLanguage===params.language)return status();
+    languageSync.request(params.language);
+    return busy?status():operation(()=>{},false);
   }
   if(method==='framely.lifecycle.start')return {ready:true};
   if(method==='framely.lifecycle.stop'){await stop();return {stopped:true};}

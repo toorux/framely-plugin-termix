@@ -103,15 +103,22 @@ try:
     assert request(f'https://127.0.0.1:{https_port}'+parsed.path+'?'+parsed.query)[0]==403
     conn=http.client.HTTPConnection(parsed.hostname,parsed.port,timeout=15)
     conn.request('GET',parsed.path+'?'+parsed.query);reply=conn.getresponse()
-    assert reply.status==303,reply.read()
+    assert reply.status==200,reply.read()
     cookie=reply.getheader('set-cookie');assert 'HttpOnly' in cookie and 'SameSite=Strict' in cookie
-    assert reply.getheader('location')=='/'
-    cookie=cookie.split(';')[0];reply.read();conn.close()
+    session_html=reply.read().decode()
+    import re
+    window_session=json.loads(re.search(r'id="framely-window-session">(.*?)</script>',session_html).group(1))
+    assert window_session['username']=='integration'
+    cookie=cookie.split(';')[0];conn.close()
     conn=http.client.HTTPConnection(parsed.hostname,parsed.port,timeout=15)
     conn.request('GET',parsed.path+'?'+parsed.query);reply=conn.getresponse();assert reply.status==403;reply.read();conn.close()
     window_base=f'http://{parsed.hostname}:{parsed.port}'
     assert request(window_base+'/users/me',cookie=cookie)[0]==200
     assert request(window_base+'/host/db/host',cookie=cookie)[0]==200
+    assert request(window_base+'/users/me',token=window_session['token'])[0]==200
+    assert request(window_base+'/framely-window/session.js')[0]==200
+    assert request(f'http://127.0.0.1:{http_port}/framely-window/session.js')[0]==403
+    assert request(f'https://127.0.0.1:{https_port}/framely-window/session.js')[0]==403
     assert request(f'http://127.0.0.1:{http_port}/host/db/host')[0]==401
     assert request(f'https://127.0.0.1:{https_port}/host/db/host')[0]==401
     window_cookie=cookie
@@ -143,8 +150,8 @@ try:
     preserved=next(h for h in json.loads(hosts) if h.get('name')=='Preserved secret')
     code,secret=request(f'http://127.0.0.1:{http_port}/host/db/host/{preserved["id"]}/password',token=token)
     assert code==200 and json.loads(secret)['value']=='preserved-host-password'
-    rpc('language.sync',{'language':'zh-CN'});assert rpc('status.get')['language']=='zh-CN'
-    rpc('settings.save',{'language':'ja-JP'});finish();rpc('language.sync',{'language':'en-US'});assert rpc('status.get')['language']=='ja-JP'
+    rpc('language.sync',{'language':'zh-CN'});assert finish()['language']=='zh-CN'
+    rpc('settings.save',{'language':'ja-JP'});finish();rpc('language.sync',{'language':'en-US'});assert finish()['language']=='ja-JP'
     print('PASS: password change preserves account, old password rejected, language follow and override',flush=True)
     rpc('service.set',{'enabled':False});assert finish()['phase']=='stopped'
     for port in [http_port,https_port]:
